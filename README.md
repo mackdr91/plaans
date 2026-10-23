@@ -1,31 +1,41 @@
 # `@plaans` — One Link for Every Plan
 
-**Plaans** is a visual itinerary and event plan builder web application built with **Flutter Web** and **Provider**. Inspired by the design-first link-in-bio aesthetic of [Liinks.co](https://www.liinks.co/) and the modular layout studio of Squarespace, Plaans lets creators, travelers, and event hosts design custom shareable itinerary microsites with **Google Maps & Apple Maps GPS navigation**, drag-and-drop block customization, and image uploads.
+**Plaans** is a 100% mobile-first visual itinerary and event plan builder built with **Flutter**, **Provider**, **Firebase**, **Django REST Framework**, and **MongoDB**. Inspired by the design-first link-in-bio aesthetic of [Liinks.co](https://www.liinks.co/) and the modular layout studio of Squarespace, Plaans lets creators, travelers, and event hosts design custom shareable itinerary microsites with **Google Maps & Apple Maps GPS navigation**, drag-and-drop block customization, image uploads, and cloud vanity slugs.
 
 ---
 
 ## ✨ Key Features
 
-### 1. Liinks.co-Inspired Landing & Showcase Experience
-- **Floating Frosted Pill Navbar**: Clean glassmorphic navigation bar (`@plaans`, `Itineraries`, `GPS & Maps`, `Templates`, `Studio Editor`, and `Get started`).
-- **Pastel Aurora Glow Canvas (`LiinksAuroraBackground`)**: Soft radial lavender (`#E0E7FF`), sky-blue (`#DFF2FE`), and rose (`#FCE7F3`) ambient background glows.
-- **Instant Slug Claim Bar**: Type any custom slug into `plaans.co/your-trip` and click **Get Started** to immediately generate and launch a new itinerary in the Studio.
-- **3 Fanned Interactive Phone Previews & "Made with Plaans" Gallery**: Live preview cards showcasing real starter itineraries (*72 Hours in Tokyo*, *NYC Downtown Saturday*, *Amalfi Coast Sun & Sea*) that open in the Studio with a single click.
+### 1. 100% Mobile-First Experience Across Every Screen
+- **Mobile-First Studio Editor (`< 760px`)**:
+  - Renders the live itinerary canvas **full-bleed** (edge-to-edge without redundant phone bezels on mobile screens).
+  - **Compact Mobile Top Bar**: One-tap `plaans.co/<slug>` copy pill, Undo/Redo, Live Visitor Preview toggle, and Share button.
+  - **Thumb-Friendly Bottom Navigation Bar**: Switch with one thumb between **Canvas**, **Blocks**, **Styles**, **GPS**, and **Plans**, paired with a floating **+ Add Block** action button.
+- **Desktop 3-Column Live Studio (`>= 960px`)**:
+  - Automatically expands into the Liinks.co 3-column Studio layout: leftmost dark icon rail (`#181920`), `Content | Styles` white inspector panel, and right Phone Mockup / Desktop stage.
+- **Adaptive Bottom-Sheet Modals**:
+  - Both the **Block Editor (`BlockEditorModal`)** and **Share & Publish Modal (`SharePlanDialog`)** open as smooth, scrollable modal bottom sheets on phones and centered dialogs on desktop.
+- **Mobile-First Landing & Showcase (`LiinksLandingScreen`)**:
+  - Features a floating frosted pill navbar, pastel aurora background (`LiinksAuroraBackground`), instant `plaans.co/your-trip` slug claim bar, a touch-friendly **horizontal swipeable phone carousel** on mobile (and 3-phone fan on desktop), and the *"Made with Plaans"* starter gallery.
 
-### 2. 3-Column Live Studio Editor ("Edit it live, see it instantly")
-- **Leftmost Dark Icon Rail (`#181920`)**: Quick navigation between Landing Home, Content & Blocks, Styles & Colors, GPS & Maps Hub, Saved Plans, Device Viewport Toggle, and QR Code Sharing.
-- **`Content | Styles` Segmented Inspector Panel**:
-  - **Content Tab**: 6 one-click block creation pills + drag-and-drop block reorder list.
-  - **Styles Tab**: Liinks-style expandable color rows (`Background`, `Text Color`, `Block Surface Color`, `Label & GPS Accent Color`) with right-aligned circular color swatches, Undo/Preset Cycle buttons, typography pairings, and card surface styles.
-- **Realistic Phone Mockup & Desktop Preview Stage**:
-  - Switch between **Phone Preview** (dark-bezel phone frame featuring a live `plaans.co/<slug>` top URL bar with copy/share actions) and **Desktop Web Layout**.
+### 2. Creator & Traveler UX Enhancements
+- **20-Step Undo / Redo & Delete Recovery**:
+  - Full `_undoStack` and `_redoStack` in `PlanStudioProvider` with Undo/Redo buttons in the Studio top bar and an instant **"Deleted block — UNDO"** floating snackbar whenever a card is removed.
+- **Next-Stop Distance & Walk/Drive ETA Badges (`MapsService.formatTravelLegSummary`)**:
+  - Computes real-time Haversine distance between consecutive GPS stops and displays a connector pill below each stop (`Next stop: 0.9 km · ~11 min walk` or `4.2 km · ~12 min drive`).
+- **Interactive Traveler Check-Off (`Visited ✓`) & Progress Tracker**:
+  - Guests can tap **Check off / Visited** on any stop card as they move through the city, persisted per-device in `SharedPreferences` and summarized in the header (`2/6 Visited ✓`).
+- **1-Tap Google Calendar Export (`+ Cal`)**:
+  - Timed event and reservation cards include a `+ Cal` / `+ Add to Calendar` pill next to the Google Maps and Apple Maps GPS buttons that pre-fills the event title, time, notes, and venue address in Google Calendar.
+- **At-a-Glance Trip Summary & Instant Category Filters**:
+  - Displays an automatic summary strip below the bio (`3 Days · 6 Stops · Est. $73 · 2/6 Visited ✓`) by parsing stop counts and `costEstimate` fields, plus horizontal category filter chips (`All Stops`, `Food & Drink`, `Sightseeing`, `Nightlife`).
 
 ### 3. Modular Drag-and-Drop Block System
 Every Plan is composed of a centered **Profile Header** (circular avatar, title, `@handle`, dates, bio, quick-action icons, and centered Day Pill Tabs) followed by a reorderable list of modular blocks:
 
 | Block Type | Enum | Description |
 | :--- | :--- | :--- |
-| **Place / Event Stop** | `BlockType.placeEvent` | Renders as a **Liinks Split Left-Thumbnail Card** (standard/halfWidth) or a **Full-Bleed Hero Showcase Card** (`featured`). Includes start/end times, category badge, cost note, external ticket/reservation URL, and **1-tap Google Maps GPS & Apple Maps GPS buttons**. |
+| **Place / Event Stop** | `BlockType.placeEvent` | Renders as a **Liinks Split Left-Thumbnail Card** (`standard`/`halfWidth`) or a **Full-Bleed Hero Showcase Card** (`featured`). Includes start/end times, category badge, cost note, `Visited ✓` check-off, `+ Cal` export, external booking URL, and **1-tap Google Maps GPS & Apple Maps GPS buttons**. |
 | **Interactive Route Map** | `BlockType.mapOverview` | Embedded interactive map (`flutter_map`) plotting all stops with numbered pins, connecting route polylines, horizontal stop quick-jump chips, and **Full Route in Google Maps / Apple Maps GPS** buttons. |
 | **Link Button Card** | `BlockType.linkCard` | Classic Liinks.co pill button row with a `44x44` left thumbnail/icon, centered bold title & subtitle, and external link launcher. |
 | **Photo Upload Block** | `BlockType.photoGallery` | Upload local images (`PNG`, `JPG`, `WEBP`, `GIF`) from your device or choose from the curated travel photography gallery. |
@@ -43,7 +53,19 @@ Every Plan is composed of a centered **Profile Header** (circular avatar, title,
 - **Built-In Place & Address Geocoding**:
   - Search any venue, landmark, or street address inside the Block Editor Modal to automatically resolve and fill its GPS `latitude` and `longitude` via OpenStreetMap Nominatim + curated instant landmarks.
 
-### 5. Curated Themes & Visual Customization
+### 5. Hybrid Cloud Backend (Firebase + Django REST API + MongoDB)
+- **Try-Before-Signup Dual-Mode Architecture**:
+  - Works out-of-the-box offline via `SharedPreferences` and seamlessly syncs to the **Django + MongoDB REST API (`backend/`)** when online.
+- **Custom Vanity Slugs (`plaans.co/<slug>`)**:
+  - Live slug availability check (`GET /api/plans/check-slug/<slug>/`) with `AVAILABLE` / `TAKEN` badge in the Share modal.
+- **3 Visibility & Privacy Modes (`PlanVisibility`)**:
+  - **Public**: Discoverable and viewable via `plaans.co/<slug>`.
+  - **Unlisted Link**: Viewable by anyone with the link.
+  - **PIN Protected**: Requires a 4–6 digit group trip PIN (verified via SHA-256 hash on the Django + MongoDB backend) before unlocking the itinerary in `_PinProtectedUnlockView`.
+- **Self-Contained Portable URLs & QR Codes**:
+  - Also supports serverless base64 URL payloads (`/#/p/<slug>?data=...`) and an instant scannable QR code (`qr_flutter`).
+
+### 6. Curated Themes & Visual Customization
 Includes 6 built-in themes inspired by featured pages on `liinks.co`:
 1. **Wildstem Cream** (`#F6EFEA` floral cream canvas, `Playfair Display` editorial headings, white soft-glow cards)
 2. **Bakehouse Crimson** (`#8B1E29` deep berry canvas, crisp white split-thumbnail cards, `Plus Jakarta Sans`)
@@ -52,75 +74,78 @@ Includes 6 built-in themes inspired by featured pages on `liinks.co`:
 5. **Parita Plum** (`#5D4E60` muted plum canvas, rose-gold accents, `DM Sans`)
 6. **Goodee Sandstone** (`#E3D8C8` warm parchment canvas, crisp outline borders, golden accents)
 
-### 6. Instant Sharing & QR Codes
-- **Clean Slug Links**: Share via `/#/p/<slug>` (e.g., `/#/p/tokyo-72-hours`).
-- **Self-Contained Portable URLs**: Encodes the entire plan JSON & theme into a URL-safe base64 query parameter (`/#/p/<slug>?data=...`) so anyone can open the exact customized itinerary on any device without requiring a login.
-- **QR Code Generator**: Built-in scannable QR code inside the Share modal (`qr_flutter`) for sharing itineraries in person.
-
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Full-Stack Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Screens["UI Screens (lib/screens/)"]
-        Landing["LiinksLandingScreen\n(Hero + Claim Bar + Fanned Phones)"]
-        Studio["StudioScreen\n(Dark Rail + Content/Styles + Phone Stage)"]
-        Visitor["PublicVisitorPreviewScaffold\n(Distraction-Free Shared View)"]
+    subgraph FlutterApp["Flutter Web & Mobile App (Provider)"]
+        UI["Mobile-First Studio, Landing & PIN Gate UI"]
+        Prov["PlanStudioProvider\n(Undo/Redo + Filters + Visited State)"]
+        CloudSvc["CloudApiService\n(Dual-Mode REST Client)"]
+        LocalRepo["PlanRepository\n(SharedPreferences + Portable URL)"]
     end
 
-    subgraph Widgets["Modular Widgets (lib/widgets/)"]
-        Canvas["PlanPageCanvas\n(Centered Profile + Day Pill Tabs)"]
-        Blocks["PlanBlockRenderer\n(Split-Thumbnail & Pill Cards)"]
-        MapWidget["InteractivePlanMap\n(Numbered Pins + Route Polyline)"]
-        Editor["BlockEditorModal\n(Place Search + Image Upload)"]
-        ShareModal["SharePlanDialog\n(QR Code + Portable Link)"]
+    subgraph FirebaseCloud["Firebase Services"]
+        FBAuth["Firebase Auth\n(Google / Email JWT)"]
+        FBStorage["Firebase Cloud Storage\n(Uploaded Photos)"]
     end
 
-    subgraph State["Provider State (lib/providers/)"]
-        Provider["PlanStudioProvider\n(ChangeNotifier)"]
+    subgraph DjangoBackend["Monorepo Backend (backend/)"]
+        DRF["Django REST API\n(/api/plans/ & /api/health/)"]
+        MongoRepo["PlansMongoRepository\n(pymongo + In-Memory Fallback)"]
+        MongoDB[("MongoDB\n(plans_db.plans)")]
     end
 
-    subgraph Services["Services & Storage (lib/services/)"]
-        MapsSvc["MapsService\n(Google/Apple Maps GPS + Geocoding)"]
-        ImgSvc["ImageService\n(FilePicker Base64 + Gallery)"]
-        Repo["PlanRepository\n(SharedPreferences + URL Payload)"]
-    end
-
-    Screens --> Widgets
-    Screens --> State
-    Widgets --> State
-    State --> Services
+    UI --> Prov
+    Prov --> LocalRepo
+    Prov --> CloudSvc
+    CloudSvc --> FBAuth
+    CloudSvc --> FBStorage
+    CloudSvc -->|Bearer Token / X-Plaans-Uid| DRF
+    DRF --> MongoRepo
+    MongoRepo --> MongoDB
 ```
 
 ---
 
-## 📂 Project Structure
+## 📂 Monorepo Project Structure
 
 ```text
 plaans/
 ├── lib/
 │   ├── main.dart                         # App entry point, MultiProvider & /#/p/<slug> URL route handler
 │   ├── models/
-│   │   └── plan_models.dart              # PlanModel, PlanBlock, PlanTheme, LocationData & base64 share encoder
+│   │   └── plan_models.dart              # PlanModel, PlanVisibility, PlanBlock, PlanTheme & LocationData
 │   ├── providers/
-│   │   └── plan_studio_provider.dart     # ChangeNotifier managing active plan, drag-and-drop, themes & filters
+│   │   └── plan_studio_provider.dart     # ChangeNotifier (Undo/Redo, drag-and-drop, cloud sync, Visited check-off)
 │   ├── services/
-│   │   ├── maps_service.dart             # Google Maps & Apple Maps GPS URL builders + Nominatim place search
+│   │   ├── cloud_api_service.dart        # Dual-mode HTTP client for Django + MongoDB API & Creator Auth
+│   │   ├── maps_service.dart             # Google/Apple Maps GPS links, Haversine leg ETAs & Google Calendar URLs
 │   │   ├── image_service.dart            # Device image upload (FilePicker) & curated travel photo library
 │   │   └── plan_repository.dart          # Local persistence, starter templates & shareable slug lookup
 │   ├── screens/
-│   │   ├── liinks_landing_screen.dart    # Liinks.co-style landing page with claim bar & fanned phone cards
-│   │   └── studio_screen.dart            # 3-column live Studio editor & public visitor preview scaffold
+│   │   ├── liinks_landing_screen.dart    # Mobile-first landing page with swipeable phone carousel & claim bar
+│   │   └── studio_screen.dart            # Mobile full-bleed Studio + bottom nav, 3-column desktop Studio & PIN gate
 │   └── widgets/
-│       ├── plan_page_canvas.dart         # Centered Liinks profile header, day pill tabs & reorderable block list
-│       ├── block_widgets.dart            # Split left-thumbnail event cards, pill link rows, galleries & notes
+│       ├── plan_page_canvas.dart         # Centered Liinks profile header, Trip Summary pill, Day & Category tabs
+│       ├── block_widgets.dart            # Split-thumbnail event cards, leg distance pills, + Cal & Visited toggles
 │       ├── interactive_plan_map.dart     # Multi-stop FlutterMap with numbered markers & GPS route chips
-│       ├── block_editor_sheet.dart       # Modal inspector for editing blocks, searching GPS coordinates & uploading photos
-│       ├── share_plan_dialog.dart        # QR code generator, clean link & portable URL copy modal
+│       ├── block_editor_sheet.dart       # Responsive bottom-sheet / dialog inspector with place geocoding
+│       ├── share_plan_dialog.dart        # Vanity slug checker, Public/Unlisted/PIN privacy, Cloud Sync & QR code
 │       └── plan_image.dart               # Theme typography/decorations, LiinksAuroraBackground & image renderer
+├── backend/
+│   ├── manage.py                         # Django CLI entry point
+│   ├── requirements.txt                  # Django, DRF, django-cors-headers, pymongo, firebase-admin
+│   ├── Dockerfile & docker-compose.yml   # One-command MongoDB 7 + Django API container setup
+│   ├── plaans_api/                       # Django project configuration, CORS & settings
+│   └── plans/                            # REST endpoints (views.py), MongoDB repository (mongo_repo.py) & tests
+├── web/
+│   ├── index.html                        # Modern mobile-first HTML5 shell (100dvh, clamp(), fetchpriority="high")
+│   └── manifest.json                     # PWA manifest
 ├── test/
-│   └── widget_test.dart                  # Unit tests for GPS URLs, multi-stop routes, URL sharing & reordering
+│   └── widget_test.dart                  # Unit tests for GPS URLs, routes, PIN unlock, Undo/Redo & leg ETAs
 └── pubspec.yaml                          # Flutter dependencies & configuration
 ```
 
@@ -130,29 +155,42 @@ plaans/
 
 ### Prerequisites
 - **Flutter SDK**: `>=3.10.0` (tested with Flutter `3.47.0` / Dart `3.13.0`)
-- A modern web browser (Chrome, Edge, Safari, or Firefox)
+- **Python**: `>=3.9` (for the Django + MongoDB REST API in `backend/`)
+- **MongoDB**: Local MongoDB (`localhost:27017`) or Docker (automatically falls back to an in-memory store if MongoDB is not running)
 
-### 1. Install Dependencies
+### 1. Run the Flutter Web App
 ```bash
 flutter pub get
-```
-
-### 2. Run in Development Mode
-```bash
 flutter run -d chrome
 ```
+Or build and serve the production web bundle on port `8099`:
+```bash
+flutter build web
+python3 -m http.server 8099 --directory build/web
+```
+
+### 2. Run the Django + MongoDB Backend (`backend/`)
+**Using Python `venv`:**
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py test
+.venv/bin/python manage.py runserver 0.0.0.0:8088
+```
+**Or using Docker Compose:**
+```bash
+cd backend
+docker compose up --build
+```
+Verify backend health at `http://localhost:8088/api/health/`.
 
 ### 3. Run Static Analysis & Automated Tests
 ```bash
+# Flutter static analysis & unit tests
 flutter analyze
 flutter test
-```
 
-### 4. Build for Production Web
-```bash
-flutter build web --release
-```
-The compiled static web bundle is output to `build/web/` and can be deployed directly to **Firebase Hosting**, Vercel, Netlify, or served locally:
-```bash
-python3 -m http.server 8099 --directory build/web
+# Django + MongoDB API tests
+cd backend && .venv/bin/python manage.py test
 ```
