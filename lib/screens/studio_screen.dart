@@ -342,7 +342,18 @@ class _MobileStudioTopBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
+          // Undo / Redo on Mobile Top Bar
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Undo',
+            onPressed: provider.canUndo ? () => provider.undo() : null,
+            icon: Icon(
+              Icons.undo_rounded,
+              size: 17,
+              color: provider.canUndo ? Colors.white : Colors.white24,
+            ),
+          ),
           // Visitor preview icon button
           IconButton(
             visualDensity: VisualDensity.compact,
@@ -526,6 +537,33 @@ class _LiinksWindowTopBar extends StatelessWidget {
           ),
 
           const Spacer(),
+
+          // Undo / Redo Quick Controls
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Undo last edit',
+            onPressed: provider.canUndo ? () => provider.undo() : null,
+            icon: Icon(
+              Icons.undo_rounded,
+              size: 18,
+              color: provider.canUndo
+                  ? const Color(0xFF1D1D28)
+                  : const Color(0xFFB4B4C4),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Redo edit',
+            onPressed: provider.canRedo ? () => provider.redo() : null,
+            icon: Icon(
+              Icons.redo_rounded,
+              size: 18,
+              color: provider.canRedo
+                  ? const Color(0xFF1D1D28)
+                  : const Color(0xFFB4B4C4),
+            ),
+          ),
+          const SizedBox(width: 4),
 
           // Right Quick Actions: Visitor View & Share Pill
           TextButton.icon(

@@ -1,10 +1,87 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../models/plan_models.dart';
 
 /// Service for Google Maps & Apple Maps GPS deep-linking, multi-stop routes, and geocoding lookup.
 class MapsService {
+  /// Calculates the great-circle distance in kilometers between two GPS locations using the Haversine formula.
+  static double calculateDistanceKm(LocationData a, LocationData b) {
+    if (!a.hasCoordinates || !b.hasCoordinates) return 0.0;
+    const earthRadiusKm = 6371.0;
+    final dLat = _degToRad(b.latitude! - a.latitude!);
+    final dLon = _degToRad(b.longitude! - a.longitude!);
+    final lat1 = _degToRad(a.latitude!);
+    final lat2 = _degToRad(b.latitude!);
+
+    final hav = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(hav), math.sqrt(1 - hav));
+    return earthRadiusKm * c;
+  }
+
+  static double _degToRad(double deg) => deg * (math.pi / 180.0);
+
+  /// Formats a human-friendly travel leg badge between two stops (e.g. `0.9 km · ~11 min walk` or `4.2 km · ~12 min drive`).
+  static String? formatTravelLegSummary(LocationData? from, LocationData? to) {
+    if (from == null ||
+        to == null ||
+        !from.hasCoordinates ||
+        !to.hasCoordinates) {
+      return null;
+    }
+    final km = calculateDistanceKm(from, to);
+    if (km < 0.05) return 'Same area (< 1 min walk)';
+    if (km <= 1.8) {
+      final walkMins = (km / 4.8 * 60).round().clamp(2, 90);
+      return '${km.toStringAsFixed(1)} km · ~$walkMins min walk';
+    }
+    final driveMins = (km / 26.0 * 60 + 3).round().clamp(4, 240);
+    return '${km.toStringAsFixed(1)} km · ~$driveMins min drive';
+  }
+
+  /// Builds a 1-tap Google Calendar event creation URL for a `PlanBlock`
+  static String buildGoogleCalendarEventUrl(
+    PlanBlock block, {
+    String? planTitle,
+  }) {
+    final title = Uri.encodeComponent(
+      planTitle != null && planTitle.isNotEmpty
+          ? '${block.title} ($planTitle)'
+          : block.title,
+    );
+    final detailsParts = <String>[
+      if (block.startTime.isNotEmpty)
+        'Time: ${block.startTime}${block.endTime.isNotEmpty ? ' - ${block.endTime}' : ''}',
+      if (block.subtitle.isNotEmpty) block.subtitle,
+      if (block.description.isNotEmpty) block.description,
+      if (block.externalUrl != null && block.externalUrl!.isNotEmpty)
+        'Link: ${block.externalUrl}',
+    ];
+    final details = Uri.encodeComponent(detailsParts.join('\n'));
+    final locString = block.location != null
+        ? [block.location!.placeName, block.location!.address]
+            .where((s) => s.trim().isNotEmpty)
+            .join(', ')
+        : '';
+    final location = Uri.encodeComponent(locString);
+
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=$title&details=$details&location=$location';
+  }
+
+  static Future<bool> openGoogleCalendarEvent(
+    PlanBlock block, {
+    String? planTitle,
+  }) async {
+    final uri = Uri.parse(
+      buildGoogleCalendarEventUrl(block, planTitle: planTitle),
+    );
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
   /// Launches Google Maps (Search/Pin or GPS Turn-by-Turn Directions)
   static Future<bool> openGoogleMaps(
     LocationData location, {

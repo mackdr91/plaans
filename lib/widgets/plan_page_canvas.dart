@@ -79,13 +79,30 @@ class PlanPageCanvas extends StatelessWidget {
                   child: Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: isCompactMobileFrame ? 16 : 24,
-                      vertical: 8,
+                      vertical: 6,
                     ),
                     child: _LiinksPillTabBar(
                       plan: plan,
                       dayTags: dayTags,
                       selectedDay: provider.selectedDayFilter,
                       onSelectDay: provider.setDayFilter,
+                    ),
+                  ),
+                ),
+
+              // 2b. Instant Category Filter Chips (when multiple stop categories exist)
+              if (provider.availableCategories.length > 1)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isCompactMobileFrame ? 16 : 24,
+                      vertical: 4,
+                    ),
+                    child: _CategoryFilterStrip(
+                      theme: theme,
+                      categories: provider.availableCategories,
+                      selectedCategory: provider.selectedCategoryFilter,
+                      onSelectCategory: provider.setCategoryFilter,
                     ),
                   ),
                 ),
@@ -103,6 +120,7 @@ class PlanPageCanvas extends StatelessWidget {
                         provider.reorderBlocks(oldIdx, newIdx),
                     itemBuilder: (context, idx) {
                       final block = visibleBlocks[idx];
+                      final nextLoc = _findNextStopLocation(visibleBlocks, idx);
                       return Padding(
                         key: ValueKey(block.id),
                         padding: const EdgeInsets.only(bottom: 12),
@@ -113,6 +131,11 @@ class PlanPageCanvas extends StatelessWidget {
                           isEditing: true,
                           isHighlighted:
                               provider.highlightedBlockId == block.id,
+                          isCompleted: provider.isBlockCompleted(block.id),
+                          onToggleCompleted: () =>
+                              provider.toggleBlockCompleted(block.id),
+                          nextStopLocation: nextLoc,
+                          planTitle: plan.title,
                           dragIndex: idx,
                           onEdit: () => BlockEditorModal.show(
                             context,
@@ -120,7 +143,21 @@ class PlanPageCanvas extends StatelessWidget {
                             onSave: provider.updateBlock,
                           ),
                           onDuplicate: () => provider.duplicateBlock(block.id),
-                          onDelete: () => provider.deleteBlock(block.id),
+                          onDelete: () {
+                            final removedTitle = block.title;
+                            provider.deleteBlock(block.id);
+                            ScaffoldMessenger.of(context).clearSnackBars();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                content: Text('Deleted "$removedTitle"'),
+                                action: SnackBarAction(
+                                  label: 'UNDO',
+                                  onPressed: () => provider.undo(),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       );
                     },
@@ -138,6 +175,8 @@ class PlanPageCanvas extends StatelessWidget {
                       theme: theme,
                       allLocatedBlocks: locatedBlocks,
                       isCompact: isCompactMobileFrame,
+                      provider: provider,
+                      planTitle: plan.title,
                     ),
                   ),
                 ),
@@ -203,18 +242,127 @@ class PlanPageCanvas extends StatelessWidget {
   }
 }
 
+LocationData? _findNextStopLocation(List<PlanBlock> blocks, int currentIndex) {
+  final current = blocks[currentIndex];
+  if (current.type != BlockType.placeEvent || !current.hasLocation) {
+    return null;
+  }
+  for (int j = currentIndex + 1; j < blocks.length; j++) {
+    final candidate = blocks[j];
+    if (candidate.type == BlockType.placeEvent && candidate.hasLocation) {
+      return candidate.location;
+    }
+  }
+  return null;
+}
+
+/// Instant Category Filter Chip Strip (`All Types`, `Food & Drink`, `Sightseeing`, etc.)
+class _CategoryFilterStrip extends StatelessWidget {
+  final PlanTheme theme;
+  final List<String> categories;
+  final String? selectedCategory;
+  final ValueChanged<String?> onSelectCategory;
+
+  const _CategoryFilterStrip({
+    required this.theme,
+    required this.categories,
+    required this.selectedCategory,
+    required this.onSelectCategory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CategoryChipPill(
+              label: 'All Stops',
+              isSelected: selectedCategory == null,
+              theme: theme,
+              onTap: () => onSelectCategory(null),
+            ),
+            ...categories.map(
+              (cat) => Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: _CategoryChipPill(
+                  label: cat,
+                  isSelected: selectedCategory == cat,
+                  theme: theme,
+                  onTap: () => onSelectCategory(
+                    selectedCategory == cat ? null : cat,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryChipPill extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final PlanTheme theme;
+  final VoidCallback onTap;
+
+  const _CategoryChipPill({
+    required this.label,
+    required this.isSelected,
+    required this.theme,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.primaryAccent
+              : theme.textColor.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: planTextStyle(
+            theme,
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected
+                ? Colors.white
+                : theme.textColor.withValues(alpha: 0.78),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Visitor view supports side-by-side `halfWidth` cards when screen space allows
 class _VisitorBlockLayout extends StatelessWidget {
   final List<PlanBlock> blocks;
   final PlanTheme theme;
   final List<PlanBlock> allLocatedBlocks;
   final bool isCompact;
+  final PlanStudioProvider provider;
+  final String planTitle;
 
   const _VisitorBlockLayout({
     required this.blocks,
     required this.theme,
     required this.allLocatedBlocks,
     required this.isCompact,
+    required this.provider,
+    required this.planTitle,
   });
 
   @override
@@ -249,6 +397,11 @@ class _VisitorBlockLayout extends StatelessWidget {
                         block: current,
                         theme: theme,
                         allLocatedBlocks: allLocatedBlocks,
+                        isCompleted: provider.isBlockCompleted(current.id),
+                        onToggleCompleted: () =>
+                            provider.toggleBlockCompleted(current.id),
+                        nextStopLocation: _findNextStopLocation(blocks, i),
+                        planTitle: planTitle,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -257,6 +410,11 @@ class _VisitorBlockLayout extends StatelessWidget {
                         block: next,
                         theme: theme,
                         allLocatedBlocks: allLocatedBlocks,
+                        isCompleted: provider.isBlockCompleted(next.id),
+                        onToggleCompleted: () =>
+                            provider.toggleBlockCompleted(next.id),
+                        nextStopLocation: _findNextStopLocation(blocks, i + 1),
+                        planTitle: planTitle,
                       ),
                     ),
                   ],
@@ -272,6 +430,11 @@ class _VisitorBlockLayout extends StatelessWidget {
                   block: current,
                   theme: theme,
                   allLocatedBlocks: allLocatedBlocks,
+                  isCompleted: provider.isBlockCompleted(current.id),
+                  onToggleCompleted: () =>
+                      provider.toggleBlockCompleted(current.id),
+                  nextStopLocation: _findNextStopLocation(blocks, i),
+                  planTitle: planTitle,
                 ),
               ),
             );
@@ -482,7 +645,15 @@ class _LiinksCenteredProfileHeader extends StatelessWidget {
           ),
         ],
 
-        const SizedBox(height: 14),
+        // At-a-Glance Trip Summary & Visited Progress Strip
+        const SizedBox(height: 12),
+        _TripAtAGlanceSummaryPill(
+          plan: plan,
+          provider: provider,
+          theme: theme,
+        ),
+
+        const SizedBox(height: 12),
 
         // Centered Social / Quick-Action Icon Row (matching Liinks' icon bar under bio)
         Wrap(
@@ -968,6 +1139,56 @@ class _AddBlockButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// At-a-Glance Trip Summary & Visited Progress Bar (`3 Days · 6 Stops · Est. $73 · 2/6 Visited`)
+class _TripAtAGlanceSummaryPill extends StatelessWidget {
+  final PlanModel plan;
+  final PlanStudioProvider provider;
+  final PlanTheme theme;
+
+  const _TripAtAGlanceSummaryPill({
+    required this.plan,
+    required this.provider,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final daysCount = plan.dayTags.length;
+    final stopsCount = provider.totalPlaceStopsCount;
+    final doneCount = provider.completedStopsCount;
+    final budgetLabel = provider.estimatedTotalBudgetLabel;
+
+    final metrics = <String>[
+      if (daysCount > 0) '$daysCount ${daysCount == 1 ? 'Day' : 'Days'}',
+      '$stopsCount ${stopsCount == 1 ? 'Stop' : 'Stops'}',
+      ?budgetLabel,
+      if (doneCount > 0) '$doneCount/$stopsCount Visited ✓',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.textColor.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: theme.textColor.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Text(
+        metrics.join('   ·   '),
+        textAlign: TextAlign.center,
+        style: planTextStyle(
+          theme,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: theme.textColor.withValues(alpha: 0.85),
         ),
       ),
     );

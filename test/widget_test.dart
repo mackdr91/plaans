@@ -130,5 +130,45 @@ void main() {
       expect(goodAttempt, isTrue);
       expect(provider.isVisitorPinLocked, isFalse);
     });
+
+    test('Supports multi-step Undo/Redo, Visited check-off, and Haversine leg ETA',
+        () async {
+      final provider = PlanStudioProvider();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final plan = await provider.createNewPlan(title: 'Rome Food Tour');
+      final initialBlockCount = plan.blocks.length;
+
+      final added = await provider.addBlock(BlockType.placeEvent);
+      expect(provider.activePlan!.blocks.length, equals(initialBlockCount + 1));
+      expect(provider.canUndo, isTrue);
+
+      await provider.undo();
+      expect(provider.activePlan!.blocks.length, equals(initialBlockCount));
+      expect(provider.canRedo, isTrue);
+
+      await provider.redo();
+      expect(provider.activePlan!.blocks.length, equals(initialBlockCount + 1));
+
+      // Test Visited check-off toggle
+      expect(provider.isBlockCompleted(added!.id), isFalse);
+      await provider.toggleBlockCompleted(added.id);
+      expect(provider.isBlockCompleted(added.id), isTrue);
+
+      // Test Haversine distance & walk/drive leg formatter
+      const stopA = LocationData(
+        placeName: 'Balthazar',
+        latitude: 40.7226,
+        longitude: -73.9982,
+      );
+      const stopB = LocationData(
+        placeName: 'Dante NYC',
+        latitude: 40.7288,
+        longitude: -74.0016,
+      );
+      final leg = MapsService.formatTravelLegSummary(stopA, stopB);
+      expect(leg, isNotNull);
+      expect(leg, contains('walk'));
+    });
   });
 }

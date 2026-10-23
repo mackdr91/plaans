@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/plan_models.dart';
 import '../services/cloud_api_service.dart';
@@ -12,6 +13,8 @@ enum StudioDevicePreview {
 
 /// Provider state manager for the Plaans app (directory + active studio editor + shared view)
 class PlanStudioProvider extends ChangeNotifier {
+  static const String _completedBlocksPrefsKey = 'plaans_completed_blocks_v1';
+
   final PlanRepository _repository;
   final CloudApiService _cloudApi;
   final Uuid _uuid = const Uuid();
@@ -19,6 +22,7 @@ class PlanStudioProvider extends ChangeNotifier {
   List<PlanModel> _plans = [];
   PlanModel? _activePlan;
   String? _selectedDayFilter; // null means "All Days"
+  String? _selectedCategoryFilter; // null means "All Categories"
   String? _highlightedBlockId;
   StudioDevicePreview _devicePreview = StudioDevicePreview.mobileFrame;
   bool _isLoading = true;
@@ -32,6 +36,11 @@ class PlanStudioProvider extends ChangeNotifier {
   bool _isVisitorPinLocked = false;
   String? _pinUnlockError;
 
+  // UX Upgrades: Multi-step Undo/Redo Stack & Traveler Visited Check-Off
+  final List<PlanModel> _undoStack = [];
+  final List<PlanModel> _redoStack = [];
+  Set<String> _completedBlockIds = {};
+
   PlanStudioProvider({
     PlanRepository? repository,
     CloudApiService? cloudApi,
@@ -43,6 +52,7 @@ class PlanStudioProvider extends ChangeNotifier {
   List<PlanModel> get plans => List.unmodifiable(_plans);
   PlanModel? get activePlan => _activePlan;
   String? get selectedDayFilter => _selectedDayFilter;
+  String? get selectedCategoryFilter => _selectedCategoryFilter;
   String? get highlightedBlockId => _highlightedBlockId;
   StudioDevicePreview get devicePreview => _devicePreview;
   bool get isLoading => _isLoading;
@@ -53,23 +63,111 @@ class PlanStudioProvider extends ChangeNotifier {
   bool get isSyncingCloud => _isSyncingCloud;
   bool get isVisitorPinLocked => _isVisitorPinLocked;
   String? get pinUnlockError => _pinUnlockError;
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
 
   void setShowLandingHome(bool value) {
     _showLandingHome = value;
     notifyListeners();
   }
 
-  /// Returns the blocks visible under the current day filter
+  /// Distinct categories present in the active plan's place/event blocks
+  List<String> get availableCategories {
+    final plan = _activePlan;
+    if (plan == null) return const [];
+    final seen = <String>{};
+    final result = <String>[];
+    for (final b in plan.blocks) {
+      if (b.type == BlockType.placeEvent && b.category.trim().isNotEmpty) {
+        final cat = b.category.trim();
+        if (seen.add(cat)) {
+          result.add(cat);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Sums numeric prices in `costEstimate` (e.g. `$38`, `~$45`, `$22`) for a quick budget pill
+  String? get estimatedTotalBudgetLabel {
+    final plan = _activePlan;
+    if (plan == null) return null;
+    double total = 0;
+    final numRegex = RegExp(r'\$\s*(\d+(?:\.\d+)?)');
+    for (final b in plan.blocks) {
+      final est = b.costEstimate;
+      if (est != null && est.isNotEmpty) {
+        final match = numRegex.firstMatch(est);
+        if (match != null) {
+          total += double.tryParse(match.group(1)!) ?? 0;
+        }
+      }
+    }
+    if (total <= 0) return null;
+    return 'Est. \$${total.round()}';
+  }
+
+  /// Returns whether a traveler has checked off a stop as visited
+  bool isBlockCompleted(String blockId) => _completedBlockIds.contains(blockId);
+
+  /// Count of completed place/event stops in the active plan
+  int get completedStopsCount {
+    final plan = _activePlan;
+    if (plan == null) return 0;
+    return plan.blocks
+        .where(
+          (b) =>
+              b.type == BlockType.placeEvent &&
+              _completedBlockIds.contains(b.id),
+        )
+        .length;
+  }
+
+  /// Total place/event stops in the active plan
+  int get totalPlaceStopsCount {
+    final plan = _activePlan;
+    if (plan == null) return 0;
+    return plan.blocks.where((b) => b.type == BlockType.placeEvent).length;
+  }
+
+  Future<void> toggleBlockCompleted(String blockId) async {
+    if (_completedBlockIds.contains(blockId)) {
+      _completedBlockIds.remove(blockId);
+    } else {
+      _completedBlockIds.add(blockId);
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _completedBlocksPrefsKey,
+      _completedBlockIds.toList(),
+    );
+  }
+
+  void setCategoryFilter(String? category) {
+    _selectedCategoryFilter = category;
+    notifyListeners();
+  }
+
+  /// Returns the blocks visible under the current day and category filters
   List<PlanBlock> get visibleBlocks {
     final plan = _activePlan;
     if (plan == null) return const [];
-    if (_selectedDayFilter == null || _selectedDayFilter!.isEmpty) {
-      return plan.blocks;
-    }
     return plan.blocks.where((b) {
       if (b.type == BlockType.mapOverview) return true;
-      return b.dayTag.trim().toLowerCase() ==
-          _selectedDayFilter!.trim().toLowerCase();
+      final matchesDay = _selectedDayFilter == null ||
+          _selectedDayFilter!.isEmpty ||
+          b.dayTag.trim().toLowerCase() ==
+              _selectedDayFilter!.trim().toLowerCase();
+      if (!matchesDay) return false;
+
+      if (_selectedCategoryFilter != null &&
+          _selectedCategoryFilter!.isNotEmpty) {
+        if (b.type != BlockType.placeEvent) return false;
+        return b.category.trim().toLowerCase() ==
+            _selectedCategoryFilter!.trim().toLowerCase();
+      }
+      return true;
     }).toList();
   }
 
@@ -86,6 +184,11 @@ class PlanStudioProvider extends ChangeNotifier {
       _activePlan = _plans.first;
     }
     _creatorUser = await _cloudApi.loadSavedCreator();
+    final prefs = await SharedPreferences.getInstance();
+    final savedDone = prefs.getStringList(_completedBlocksPrefsKey);
+    if (savedDone != null) {
+      _completedBlockIds = savedDone.toSet();
+    }
     _isLoading = false;
     notifyListeners();
 
@@ -102,6 +205,9 @@ class PlanStudioProvider extends ChangeNotifier {
     if (found != null) {
       _activePlan = found;
       _selectedDayFilter = null;
+      _selectedCategoryFilter = null;
+      _undoStack.clear();
+      _redoStack.clear();
       _isVisitorView = visitorMode;
       _isVisitorPinLocked =
           visitorMode && found.visibility == PlanVisibility.pinProtected;
@@ -637,7 +743,35 @@ class PlanStudioProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _commitActivePlan(PlanModel updated) async {
+  /// Reverts the last edit on the active plan (up to 20 steps)
+  Future<void> undo() async {
+    if (_undoStack.isEmpty || _activePlan == null) return;
+    _redoStack.add(_activePlan!);
+    final previous = _undoStack.removeLast();
+    await _commitActivePlan(previous, recordHistory: false);
+  }
+
+  /// Re-applies an undone edit on the active plan
+  Future<void> redo() async {
+    if (_redoStack.isEmpty || _activePlan == null) return;
+    _undoStack.add(_activePlan!);
+    final nextState = _redoStack.removeLast();
+    await _commitActivePlan(nextState, recordHistory: false);
+  }
+
+  Future<void> _commitActivePlan(
+    PlanModel updated, {
+    bool recordHistory = true,
+  }) async {
+    if (recordHistory &&
+        _activePlan != null &&
+        _activePlan!.id == updated.id) {
+      _undoStack.add(_activePlan!);
+      if (_undoStack.length > 20) {
+        _undoStack.removeAt(0);
+      }
+      _redoStack.clear();
+    }
     _activePlan = updated;
     final idx = _plans.indexWhere((p) => p.id == updated.id);
     if (idx >= 0) {
