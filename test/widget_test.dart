@@ -99,5 +99,36 @@ void main() {
       expect(provider.visibleBlocks[0].id, equals(secondId));
       expect(provider.visibleBlocks[1].id, equals(firstId));
     });
+
+    test('Supports custom vanity slug, PIN-protected visibility, and PIN unlock',
+        () async {
+      final provider = PlanStudioProvider();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await provider.createNewPlan(title: 'Kyoto Private Retreat');
+      await provider.updatePlanSharingConfig(
+        slug: 'kyoto-vip-2026',
+        visibility: PlanVisibility.pinProtected,
+        pinCode: '7788',
+      );
+
+      expect(provider.activePlan?.slug, equals('kyoto-vip-2026'));
+      expect(
+        provider.activePlan?.visibility,
+        equals(PlanVisibility.pinProtected),
+      );
+      expect(provider.activePlan?.hasPin, isTrue);
+
+      provider.setVisitorView(true);
+      expect(provider.isVisitorPinLocked, isTrue);
+
+      final badAttempt = await provider.unlockActivePlanWithPin('0000');
+      expect(badAttempt, isFalse);
+      expect(provider.isVisitorPinLocked, isTrue);
+
+      final goodAttempt = await provider.unlockActivePlanWithPin('7788');
+      expect(goodAttempt, isTrue);
+      expect(provider.isVisitorPinLocked, isFalse);
+    });
   });
 }

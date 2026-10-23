@@ -465,6 +465,13 @@ class PlanBlock {
   }
 }
 
+/// Visibility and access control for shared plans (`plaans.co/<slug>`)
+enum PlanVisibility {
+  public,
+  unlisted,
+  pinProtected,
+}
+
 /// Top-level Plan / Itinerary document
 class PlanModel {
   final String id;
@@ -478,6 +485,12 @@ class PlanModel {
   final PlanTheme theme;
   final List<PlanBlock> blocks;
   final DateTime updatedAt;
+  final PlanVisibility visibility;
+  final String? pinCode;
+  final bool hasPin;
+  final String? ownerUid;
+  final bool isCloudSynced;
+  final int viewCount;
 
   const PlanModel({
     required this.id,
@@ -491,6 +504,12 @@ class PlanModel {
     required this.theme,
     required this.blocks,
     required this.updatedAt,
+    this.visibility = PlanVisibility.public,
+    this.pinCode,
+    this.hasPin = false,
+    this.ownerUid,
+    this.isCloudSynced = false,
+    this.viewCount = 0,
   });
 
   /// Returns all blocks that contain a valid location for map plotting & multi-stop routing
@@ -527,6 +546,12 @@ class PlanModel {
     PlanTheme? theme,
     List<PlanBlock>? blocks,
     DateTime? updatedAt,
+    PlanVisibility? visibility,
+    String? pinCode,
+    bool? hasPin,
+    String? ownerUid,
+    bool? isCloudSynced,
+    int? viewCount,
   }) {
     return PlanModel(
       id: id ?? this.id,
@@ -542,6 +567,12 @@ class PlanModel {
       theme: theme ?? this.theme,
       blocks: blocks ?? this.blocks,
       updatedAt: updatedAt ?? this.updatedAt,
+      visibility: visibility ?? this.visibility,
+      pinCode: pinCode ?? this.pinCode,
+      hasPin: hasPin ?? this.hasPin,
+      ownerUid: ownerUid ?? this.ownerUid,
+      isCloudSynced: isCloudSynced ?? this.isCloudSynced,
+      viewCount: viewCount ?? this.viewCount,
     );
   }
 
@@ -557,6 +588,12 @@ class PlanModel {
         'theme': theme.toJson(),
         'blocks': blocks.map((b) => b.toJson()).toList(),
         'updatedAt': updatedAt.toIso8601String(),
+        'visibility': visibility.name,
+        if (pinCode != null && pinCode!.isNotEmpty) 'pinCode': pinCode,
+        'hasPin': hasPin,
+        if (ownerUid != null) 'ownerUid': ownerUid,
+        'isCloudSynced': isCloudSynced,
+        'viewCount': viewCount,
       };
 
   factory PlanModel.fromJson(Map<String, dynamic> json) {
@@ -579,6 +616,15 @@ class PlanModel {
       updatedAt: json['updatedAt'] != null
           ? DateTime.tryParse(json['updatedAt'] as String) ?? DateTime.now()
           : DateTime.now(),
+      visibility: PlanVisibility.values.firstWhere(
+        (v) => v.name == json['visibility'],
+        orElse: () => PlanVisibility.public,
+      ),
+      pinCode: json['pinCode'] as String?,
+      hasPin: json['hasPin'] as bool? ?? false,
+      ownerUid: json['ownerUid'] as String?,
+      isCloudSynced: json['isCloudSynced'] as bool? ?? false,
+      viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
     );
   }
 

@@ -1,0 +1,25 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: plaans_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  api:
+    build: .
+    container_name: plaans_django_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_DEBUG=True
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=plaans_db
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo_data:

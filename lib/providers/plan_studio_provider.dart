@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/plan_models.dart';
+import '../services/cloud_api_service.dart';
 import '../services/plan_repository.dart';
 
 /// Preview viewport modes inside the Studio
@@ -12,6 +13,7 @@ enum StudioDevicePreview {
 /// Provider state manager for the Plaans app (directory + active studio editor + shared view)
 class PlanStudioProvider extends ChangeNotifier {
   final PlanRepository _repository;
+  final CloudApiService _cloudApi;
   final Uuid _uuid = const Uuid();
 
   List<PlanModel> _plans = [];
@@ -23,8 +25,18 @@ class PlanStudioProvider extends ChangeNotifier {
   bool _isVisitorView = false;
   bool _showLandingHome = true;
 
-  PlanStudioProvider({PlanRepository? repository})
-      : _repository = repository ?? PlanRepository() {
+  // Phase 2 Cloud & Creator Auth State
+  CreatorUser? _creatorUser;
+  bool _isBackendOnline = false;
+  bool _isSyncingCloud = false;
+  bool _isVisitorPinLocked = false;
+  String? _pinUnlockError;
+
+  PlanStudioProvider({
+    PlanRepository? repository,
+    CloudApiService? cloudApi,
+  })  : _repository = repository ?? PlanRepository(),
+        _cloudApi = cloudApi ?? CloudApiService() {
     _init();
   }
 
@@ -36,6 +48,11 @@ class PlanStudioProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isVisitorView => _isVisitorView;
   bool get showLandingHome => _showLandingHome;
+  CreatorUser? get creatorUser => _creatorUser;
+  bool get isBackendOnline => _isBackendOnline;
+  bool get isSyncingCloud => _isSyncingCloud;
+  bool get isVisitorPinLocked => _isVisitorPinLocked;
+  String? get pinUnlockError => _pinUnlockError;
 
   void setShowLandingHome(bool value) {
     _showLandingHome = value;
@@ -68,8 +85,15 @@ class PlanStudioProvider extends ChangeNotifier {
     if (_plans.isNotEmpty && _activePlan == null) {
       _activePlan = _plans.first;
     }
+    _creatorUser = await _cloudApi.loadSavedCreator();
     _isLoading = false;
     notifyListeners();
+
+    // Non-blocking check for local/remote Django + MongoDB API health
+    _cloudApi.checkBackendHealth().then((online) {
+      _isBackendOnline = online;
+      notifyListeners();
+    });
   }
 
   /// Selects a plan to edit in the Studio
@@ -79,15 +103,63 @@ class PlanStudioProvider extends ChangeNotifier {
       _activePlan = found;
       _selectedDayFilter = null;
       _isVisitorView = visitorMode;
+      _isVisitorPinLocked =
+          visitorMode && found.visibility == PlanVisibility.pinProtected;
+      _pinUnlockError = null;
       _showLandingHome = false;
       notifyListeners();
     }
   }
 
-  /// Opens a plan from a shared slug or URL payload
+  /// Opens a plan from a shared slug or URL payload (queries Django + MongoDB API first, then local storage)
   Future<bool> openSharedPlan(String slugOrId, {String? encodedData}) async {
     _isLoading = true;
+    _pinUnlockError = null;
     notifyListeners();
+
+    // 1. Try resolving from Django + MongoDB API if no inline base64 payload was passed
+    if (encodedData == null || encodedData.isEmpty) {
+      final cloudResult = await _cloudApi.fetchPlanBySlug(
+        slugOrId,
+        currentUser: _creatorUser,
+      );
+      if (cloudResult != null) {
+        if (cloudResult.requiresPin) {
+          final fallbackLocal = await _repository.findBySlugOrId(slugOrId);
+          _activePlan = fallbackLocal ??
+              PlanModel(
+                id: 'locked_$slugOrId',
+                slug: slugOrId,
+                title: cloudResult.lockedTitle ?? 'Private Itinerary',
+                subtitle:
+                    cloudResult.lockedSubtitle ?? 'Enter trip PIN to unlock',
+                authorName: cloudResult.lockedAuthor ?? '@creator',
+                theme: PlanTheme.presets.first,
+                blocks: const [],
+                updatedAt: DateTime.now(),
+                visibility: PlanVisibility.pinProtected,
+                hasPin: true,
+              );
+          _isVisitorView = true;
+          _isVisitorPinLocked = true;
+          _showLandingHome = false;
+          _isLoading = false;
+          notifyListeners();
+          return true;
+        } else if (cloudResult.plan != null) {
+          _activePlan = cloudResult.plan;
+          _selectedDayFilter = null;
+          _isVisitorView = true;
+          _isVisitorPinLocked = false;
+          _showLandingHome = false;
+          _isLoading = false;
+          notifyListeners();
+          return true;
+        }
+      }
+    }
+
+    // 2. Fallback to local repository / portable URL payload
     final plan = await _repository.findBySlugOrId(
       slugOrId,
       encodedData: encodedData,
@@ -97,6 +169,10 @@ class PlanStudioProvider extends ChangeNotifier {
       _activePlan = plan;
       _selectedDayFilter = null;
       _isVisitorView = true;
+      final isOwner =
+          _creatorUser != null && plan.ownerUid == _creatorUser!.uid;
+      _isVisitorPinLocked =
+          plan.visibility == PlanVisibility.pinProtected && !isOwner;
       _showLandingHome = false;
       notifyListeners();
       return true;
@@ -107,7 +183,121 @@ class PlanStudioProvider extends ChangeNotifier {
 
   void setVisitorView(bool value) {
     _isVisitorView = value;
+    final plan = _activePlan;
+    if (value && plan != null) {
+      _isVisitorPinLocked = plan.visibility == PlanVisibility.pinProtected &&
+          ((plan.pinCode?.isNotEmpty ?? false) || plan.hasPin);
+    } else {
+      _isVisitorPinLocked = false;
+    }
+    _pinUnlockError = null;
     notifyListeners();
+  }
+
+  /// Unlocks a PIN-protected plan when a visitor enters the 4–6 digit trip PIN
+  Future<bool> unlockActivePlanWithPin(String pinCode) async {
+    final current = _activePlan;
+    if (current == null) return false;
+
+    final result = await _cloudApi.unlockPinProtectedPlan(
+      current.slug,
+      pinCode: pinCode,
+      localFallbackPlan: current,
+    );
+
+    if (result.plan != null) {
+      _activePlan = result.plan;
+      _isVisitorPinLocked = false;
+      _pinUnlockError = null;
+      notifyListeners();
+      return true;
+    }
+
+    _pinUnlockError = result.error ?? 'Incorrect PIN code.';
+    notifyListeners();
+    return false;
+  }
+
+  /// Signs in the creator (via Firebase Auth or Dual-Mode Local Creator Account)
+  /// and automatically syncs the active plan to the cloud.
+  Future<CreatorUser> signInCreator({
+    required String email,
+    required String displayName,
+    String? firebaseUid,
+    String? firebaseIdToken,
+  }) async {
+    final user = await _cloudApi.signInCreator(
+      email: email,
+      displayName: displayName,
+      firebaseUid: firebaseUid,
+      firebaseIdToken: firebaseIdToken,
+    );
+    _creatorUser = user;
+    notifyListeners();
+    await publishActivePlanToCloud();
+    return user;
+  }
+
+  Future<void> signOutCreator() async {
+    await _cloudApi.signOutCreator();
+    _creatorUser = null;
+    notifyListeners();
+  }
+
+  /// Live vanity slug availability check (`plaans.co/<slug>`)
+  Future<bool> checkSlugAvailability(String candidateSlug) async {
+    final normalized = _slugify(candidateSlug);
+    return _cloudApi.checkSlugAvailability(
+      normalized,
+      excludePlanId: _activePlan?.id,
+      localPlans: _plans,
+    );
+  }
+
+  /// Updates slug, visibility (`public`, `unlisted`, `pinProtected`), and PIN code on the active plan
+  Future<void> updatePlanSharingConfig({
+    String? slug,
+    PlanVisibility? visibility,
+    String? pinCode,
+  }) async {
+    final current = _activePlan;
+    if (current == null) return;
+
+    final newVisibility = visibility ?? current.visibility;
+    final newPin = pinCode ?? current.pinCode;
+    final updated = current.copyWith(
+      slug: slug != null ? _slugify(slug) : current.slug,
+      visibility: newVisibility,
+      pinCode: newPin,
+      hasPin: newVisibility == PlanVisibility.pinProtected &&
+          (newPin != null && newPin.trim().isNotEmpty),
+      updatedAt: DateTime.now(),
+    );
+    await _commitActivePlan(updated);
+  }
+
+  /// Publishes/syncs the active plan to the Django + MongoDB cloud backend
+  Future<PlanModel?> publishActivePlanToCloud() async {
+    final current = _activePlan;
+    if (current == null) return null;
+
+    var user = _creatorUser;
+    user ??= await _cloudApi.signInCreator(
+      email: 'creator@plaans.co',
+      displayName: current.authorName.isNotEmpty
+          ? current.authorName
+          : 'Plaans Creator',
+    );
+    _creatorUser = user;
+
+    _isSyncingCloud = true;
+    notifyListeners();
+
+    final synced = await _cloudApi.syncPlanToCloud(current, user: user);
+    _isBackendOnline = await _cloudApi.checkBackendHealth();
+    _isSyncingCloud = false;
+    await _commitActivePlan(synced);
+    return synced;
   }
 
   void setDevicePreview(StudioDevicePreview mode) {
