@@ -60,7 +60,7 @@ class SlugLookupResult {
 class CloudApiService {
   static const String baseUrl = String.fromEnvironment(
     'PLAANS_API_URL',
-    defaultValue: 'http://localhost:8000/api',
+    defaultValue: 'http://localhost:8088/api',
   );
 
   static const String _creatorStorageKey = 'plaans_creator_user_v1';
