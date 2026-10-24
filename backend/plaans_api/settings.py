@@ -35,6 +35,19 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "plaans_api.urls"
 
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    },
+]
+
 WSGI_APPLICATION = "plaans_api.wsgi.application"
 
 # Minimal SQLite for Django internal test runner; domain documents live in MongoDB
@@ -68,6 +81,9 @@ CORS_ALLOW_HEADERS = [
 
 REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
 }
 
 LANGUAGE_CODE = "en-us"
