@@ -141,9 +141,6 @@ plaans/
 │   ├── Dockerfile & docker-compose.yml   # One-command MongoDB 7 + Django API container setup
 │   ├── plaans_api/                       # Django project configuration, CORS & settings
 │   └── plans/                            # REST endpoints (views.py), MongoDB repository (mongo_repo.py) & tests
-├── .github/
-│   └── workflows/
-│       └── ci_cd.yml                     # Full-Stack GitHub Actions CI/CD pipeline (Flutter + Django/MongoDB + Docker)
 ├── web/
 │   ├── index.html                        # Modern mobile-first HTML5 shell (100dvh, clamp(), fetchpriority="high")
 │   └── manifest.json                     # PWA manifest
@@ -151,19 +148,6 @@ plaans/
 │   └── widget_test.dart                  # Unit tests for GPS URLs, routes, PIN unlock, Undo/Redo & leg ETAs
 └── pubspec.yaml                          # Flutter dependencies & configuration
 ```
-
----
-
-## ⚙️ Full-Stack CI/CD Pipeline (`.github/workflows/ci_cd.yml`)
-
-Every push and pull request targeting `main` (plus manual `workflow_dispatch`) triggers the automated 3-stage GitHub Actions pipeline:
-
-1. **`flutter-ci` (Flutter Analyze, Test & Web Build)**:
-   - Installs dependencies (`flutter pub get`), runs `flutter analyze --no-fatal-infos`, executes all unit & widget tests (`flutter test --reporter expanded`), builds the release web bundle (`flutter build web --release`), and uploads the `plaans-web-release` artifact.
-2. **`backend-ci` (Django REST API & MongoDB 7 Tests)**:
-   - Provisions a live `mongo:7` service container, runs `python manage.py check`, and runs the full Django REST test suite against both live MongoDB (`MONGODB_URI=mongodb://localhost:27017`) and the offline in-memory fallback store.
-3. **`docker-smoke-test` (Docker Compose Build & Full-Stack Smoke Test)**:
-   - Downloads the compiled `build/web` artifact, builds and boots the full `docker compose` stack (`mongodb` + `api` + `web`), verifies `http://localhost:8088/api/health/` reports `"storageEngine": "mongodb"`, and confirms Nginx serves the Flutter Web app on `http://localhost:8099/`.
 
 ---
 
