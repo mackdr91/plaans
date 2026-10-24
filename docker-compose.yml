@@ -1,0 +1,39 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: plaans_mongodb
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    volumes:
+      - plaans_mongo_data:/data/db
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: plaans_django_api
+    restart: unless-stopped
+    ports:
+      - "8088:8000"
+    environment:
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,api
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=plaans_db
+    depends_on:
+      - mongodb
+
+  web:
+    image: nginx:alpine
+    container_name: plaans_web_app
+    restart: unless-stopped
+    ports:
+      - "8099:80"
+    volumes:
+      - ./build/web:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+
+volumes:
+  plaans_mongo_data:
