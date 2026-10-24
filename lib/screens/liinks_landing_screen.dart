@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/plan_models.dart';
 import '../providers/plan_studio_provider.dart';
+import '../widgets/auth_modal_sheet.dart';
 import '../widgets/plan_image.dart';
 
 /// Faithful Liinks.co-inspired Landing & Showcase Screen:
@@ -322,6 +323,43 @@ class _LiinksLandingScreenState extends State<LiinksLandingScreen> {
                               ),
                             ),
                           ),
+                        const SizedBox(width: 4),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF1D1D28),
+                            side: const BorderSide(
+                              color: Color(0xFFD4D4E0),
+                              width: 1.4,
+                            ),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 11 : 15,
+                              vertical: isMobile ? 8 : 11,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                          ),
+                          onPressed: () => AuthModalSheet.show(context),
+                          icon: Icon(
+                            widget.provider.creatorUser != null
+                                ? Icons.verified_user_rounded
+                                : Icons.person_outline_rounded,
+                            size: isMobile ? 14 : 16,
+                            color: widget.provider.creatorUser != null
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFF1D1D28),
+                          ),
+                          label: Text(
+                            widget.provider.creatorUser != null
+                                ? widget.provider.creatorUser!.displayName
+                                : 'Sign in',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: isMobile ? 12 : 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1D1D28),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(

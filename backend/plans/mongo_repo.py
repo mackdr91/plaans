@@ -1,9 +1,11 @@
 import copy
 import hashlib
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +16,8 @@ def _hash_pin(pin_code: str) -> str:
 
 class PlansMongoRepository:
     """
-    MongoDB repository for storing and querying `PlanModel` itinerary documents.
+    MongoDB repository for storing and querying `PlanModel` itinerary documents
+    and Creator user accounts (`users` collection).
     Automatically connects to MongoDB (`settings.MONGODB_URI`), and gracefully
     falls back to an in-memory document collection if MongoDB is unreachable
     (e.g., during unit tests or offline local development).
@@ -23,8 +26,10 @@ class PlansMongoRepository:
     def __init__(self) -> None:
         self._mongo_client = None
         self._collection = None
+        self._users_collection = None
         self._using_memory_fallback = False
         self._memory_docs: Dict[str, Dict[str, Any]] = {}
+        self._memory_users: Dict[str, Dict[str, Any]] = {}
         self._init_connection()
 
     def _init_connection(self) -> None:
@@ -40,8 +45,14 @@ class PlansMongoRepository:
             col.create_index([("slug", ASCENDING)], unique=True)
             col.create_index([("ownerUid", ASCENDING)])
             col.create_index([("id", ASCENDING)], unique=True)
+
+            users_col = db["users"]
+            users_col.create_index([("uid", ASCENDING)], unique=True)
+            users_col.create_index([("email", ASCENDING)], unique=True)
+
             self._mongo_client = client
             self._collection = col
+            self._users_collection = users_col
             self._using_memory_fallback = False
         except Exception as exc:
             logger.info(
@@ -54,6 +65,114 @@ class PlansMongoRepository:
     @property
     def storage_engine(self) -> str:
         return "memory-fallback" if self._using_memory_fallback else "mongodb"
+
+    # ── User Authentication & Account Persistence ────────────────────────────
+
+    def create_email_user(
+        self,
+        email: str,
+        password: str,
+        display_name: Optional[str] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        normalized_email = email.strip().lower()
+        if not normalized_email or "@" not in normalized_email:
+            return None, "Please enter a valid email address."
+        if len(password) < 6:
+            return None, "Password must be at least 6 characters."
+
+        existing = self._find_user_by_email(normalized_email)
+        if existing:
+            return None, "An account with this email already exists. Please sign in."
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        uid = f"usr_{secrets.token_hex(8)}"
+        resolved_name = (
+            display_name.strip()
+            if display_name and display_name.strip()
+            else normalized_email.split("@")[0]
+        )
+
+        user_doc: Dict[str, Any] = {
+            "uid": uid,
+            "email": normalized_email,
+            "displayName": resolved_name,
+            "photoUrl": None,
+            "authProvider": "email",
+            "passwordHash": make_password(password),
+            "createdAt": now_iso,
+            "lastLoginAt": now_iso,
+        }
+
+        self._save_user_doc(user_doc)
+        return self._sanitize_user_for_response(user_doc), None
+
+    def authenticate_email_user(
+        self,
+        email: str,
+        password: str,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        normalized_email = email.strip().lower()
+        if not normalized_email or not password:
+            return None, "Email and password are required."
+
+        user_doc = self._find_user_by_email(normalized_email)
+        if not user_doc:
+            return None, "Invalid email or password."
+
+        password_hash = user_doc.get("passwordHash")
+        if not password_hash or not check_password(password, password_hash):
+            return None, "Invalid email or password."
+
+        user_doc["lastLoginAt"] = datetime.now(timezone.utc).isoformat()
+        self._save_user_doc(user_doc)
+        return self._sanitize_user_for_response(user_doc), None
+
+    def get_user_by_uid(self, uid: str) -> Optional[Dict[str, Any]]:
+        if not uid:
+            return None
+        if self._using_memory_fallback:
+            doc = self._memory_users.get(uid)
+            return self._sanitize_user_for_response(doc) if doc else None
+        doc = self._users_collection.find_one({"uid": uid})
+        return self._sanitize_user_for_response(dict(doc)) if doc else None
+
+    def delete_user_by_email(self, email: str) -> None:
+        normalized = email.strip().lower()
+        if self._using_memory_fallback:
+            to_remove = [
+                uid
+                for uid, doc in self._memory_users.items()
+                if doc.get("email") == normalized
+            ]
+            for uid in to_remove:
+                self._memory_users.pop(uid, None)
+            return
+        self._users_collection.delete_many({"email": normalized})
+
+    def _find_user_by_email(self, normalized_email: str) -> Optional[Dict[str, Any]]:
+        if self._using_memory_fallback:
+            for doc in self._memory_users.values():
+                if doc.get("email") == normalized_email:
+                    return copy.deepcopy(doc)
+            return None
+        doc = self._users_collection.find_one({"email": normalized_email})
+        return dict(doc) if doc else None
+
+    def _save_user_doc(self, user_doc: Dict[str, Any]) -> None:
+        uid = user_doc["uid"]
+        cleaned = copy.deepcopy(user_doc)
+        cleaned.pop("_id", None)
+        if self._using_memory_fallback:
+            self._memory_users[uid] = cleaned
+        else:
+            self._users_collection.replace_one({"uid": uid}, cleaned, upsert=True)
+
+    @staticmethod
+    def _sanitize_user_for_response(doc: Dict[str, Any]) -> Dict[str, Any]:
+        cleaned = copy.deepcopy(doc)
+        cleaned.pop("_id", None)
+        cleaned.pop("passwordHash", None)
+        return cleaned
 
     def is_slug_available(self, slug: str, exclude_plan_id: Optional[str] = None) -> bool:
         normalized = slug.strip().lower()

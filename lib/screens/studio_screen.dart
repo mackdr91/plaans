@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/plan_models.dart';
 import '../providers/plan_studio_provider.dart';
 import '../services/maps_service.dart';
+import '../widgets/auth_modal_sheet.dart';
 import '../widgets/block_editor_sheet.dart';
 import '../widgets/plan_image.dart';
 import '../widgets/plan_page_canvas.dart';

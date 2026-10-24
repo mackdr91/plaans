@@ -33,6 +33,8 @@ class PlanStudioProvider extends ChangeNotifier {
   CreatorUser? _creatorUser;
   bool _isBackendOnline = false;
   bool _isSyncingCloud = false;
+  bool _isAuthLoading = false;
+  String? _authError;
   bool _isVisitorPinLocked = false;
   String? _pinUnlockError;
 
@@ -61,10 +63,19 @@ class PlanStudioProvider extends ChangeNotifier {
   CreatorUser? get creatorUser => _creatorUser;
   bool get isBackendOnline => _isBackendOnline;
   bool get isSyncingCloud => _isSyncingCloud;
+  bool get isAuthLoading => _isAuthLoading;
+  String? get authError => _authError;
   bool get isVisitorPinLocked => _isVisitorPinLocked;
   String? get pinUnlockError => _pinUnlockError;
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
+
+  void clearAuthError() {
+    if (_authError != null) {
+      _authError = null;
+      notifyListeners();
+    }
+  }
 
   void setShowLandingHome(bool value) {
     _showLandingHome = value;
@@ -324,6 +335,61 @@ class PlanStudioProvider extends ChangeNotifier {
     return false;
   }
 
+  /// Registers a new Creator with Email & Password against the Django + MongoDB API
+  /// and automatically syncs the active plan to their account.
+  Future<bool> registerWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    _isAuthLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    final res = await _cloudApi.registerWithEmailPassword(
+      email: email,
+      password: password,
+      displayName: displayName,
+    );
+    _isAuthLoading = false;
+    if (!res.isSuccess || res.user == null) {
+      _authError = res.error ?? 'Could not create account.';
+      notifyListeners();
+      return false;
+    }
+
+    _creatorUser = res.user;
+    notifyListeners();
+    await publishActivePlanToCloud();
+    return true;
+  }
+
+  /// Signs in an existing Creator with Email & Password against the Django + MongoDB API
+  Future<bool> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    _isAuthLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    final res = await _cloudApi.signInWithEmailPassword(
+      email: email,
+      password: password,
+    );
+    _isAuthLoading = false;
+    if (!res.isSuccess || res.user == null) {
+      _authError = res.error ?? 'Invalid email or password.';
+      notifyListeners();
+      return false;
+    }
+
+    _creatorUser = res.user;
+    notifyListeners();
+    await publishActivePlanToCloud();
+    return true;
+  }
+
   /// Signs in the creator (via Firebase Auth or Dual-Mode Local Creator Account)
   /// and automatically syncs the active plan to the cloud.
   Future<CreatorUser> signInCreator({
@@ -347,6 +413,7 @@ class PlanStudioProvider extends ChangeNotifier {
   Future<void> signOutCreator() async {
     await _cloudApi.signOutCreator();
     _creatorUser = null;
+    _authError = null;
     notifyListeners();
   }
 

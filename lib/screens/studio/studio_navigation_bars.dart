@@ -122,6 +122,23 @@ class _MobileStudioTopBar extends StatelessWidget {
               color: Colors.white,
             ),
           ),
+          // Creator Account / Sign In button
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: provider.creatorUser != null
+                ? 'Signed in as ${provider.creatorUser!.displayName}'
+                : 'Sign In with Email & Password',
+            onPressed: () => AuthModalSheet.show(context),
+            icon: Icon(
+              provider.creatorUser != null
+                  ? Icons.verified_user_rounded
+                  : Icons.person_outline_rounded,
+              size: 18,
+              color: provider.creatorUser != null
+                  ? const Color(0xFF43E660)
+                  : Colors.white,
+            ),
+          ),
           // Share button pill
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -322,7 +339,37 @@ class _LiinksWindowTopBar extends StatelessWidget {
           ),
           const SizedBox(width: 4),
 
-          // Right Quick Actions: Visitor View & Share Pill
+          // Right Quick Actions: Creator Account, Visitor View & Share Pill
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF1D1D28),
+              side: const BorderSide(color: Color(0xFFD4D4E0)),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            onPressed: () => AuthModalSheet.show(context),
+            icon: Icon(
+              provider.creatorUser != null
+                  ? Icons.verified_user_rounded
+                  : Icons.person_outline_rounded,
+              size: 15,
+              color: provider.creatorUser != null
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFF1D1D28),
+            ),
+            label: Text(
+              provider.creatorUser != null
+                  ? provider.creatorUser!.displayName
+                  : 'Sign In',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           TextButton.icon(
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFF1D1D28),

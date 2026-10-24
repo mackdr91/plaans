@@ -170,5 +170,33 @@ void main() {
       expect(leg, isNotNull);
       expect(leg, contains('walk'));
     });
+
+    test('Supports Email/Password authentication', () async {
+      final provider = PlanStudioProvider();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // 1. Email/Password Registration validation (short password fails)
+      final shortPass = await provider.registerWithEmail(
+        email: 'creator@plaans.co',
+        password: '123',
+        displayName: 'Alex Rivera',
+      );
+      expect(shortPass, isFalse);
+      expect(provider.authError, isNotNull);
+
+      // 2. Valid Email/Password Registration
+      final emailOk = await provider.registerWithEmail(
+        email: 'creator@plaans.co',
+        password: 'password123',
+        displayName: 'Alex Rivera',
+      );
+      expect(emailOk, isTrue);
+      expect(provider.creatorUser?.email, equals('creator@plaans.co'));
+      expect(provider.creatorUser?.providerLabel, equals('Email'));
+
+      // 3. Sign Out
+      await provider.signOutCreator();
+      expect(provider.creatorUser, isNull);
+    });
   });
 }

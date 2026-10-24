@@ -1,7 +1,10 @@
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .auth import resolve_creator_from_request
+from .auth import (
+    issue_session_token,
+    resolve_creator_from_request,
+)
 from .mongo_repo import repo
 
 
@@ -13,7 +16,97 @@ def health_check(request):
             "status": "ok",
             "service": "plaans-django-mongodb-api",
             "storageEngine": repo.storage_engine,
+            "authProviders": ["email"],
         }
+    )
+
+
+@api_view(["POST"])
+def auth_register(request):
+    """
+    `POST /api/auth/register/`
+    Creates a new Creator account with Email & Password in MongoDB (`plaans_db.users`),
+    returning `{ "token": "plaans_jwt...", "user": { ... } }`.
+    """
+    data = request.data if isinstance(request.data, dict) else {}
+    email = str(data.get("email", "")).strip()
+    password = str(data.get("password", ""))
+    display_name = str(data.get("displayName", "")).strip() or None
+
+    user_doc, err = repo.create_email_user(
+        email=email,
+        password=password,
+        display_name=display_name,
+    )
+    if err or not user_doc:
+        return Response(
+            {"error": err or "Could not create account."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    token = issue_session_token(user_doc)
+    return Response(
+        {"token": token, "user": user_doc},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+def auth_login(request):
+    """
+    `POST /api/auth/login/`
+    Authenticates an existing Creator account with Email & Password against MongoDB,
+    returning `{ "token": "plaans_jwt...", "user": { ... } }`.
+    """
+    data = request.data if isinstance(request.data, dict) else {}
+    email = str(data.get("email", "")).strip()
+    password = str(data.get("password", ""))
+
+    user_doc, err = repo.authenticate_email_user(email=email, password=password)
+    if err or not user_doc:
+        return Response(
+            {"error": err or "Invalid email or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    token = issue_session_token(user_doc)
+    return Response(
+        {"token": token, "user": user_doc},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def auth_me(request):
+    """
+    `GET /api/auth/me/`
+    Returns the currently authenticated Creator's profile and cloud-synced plans count.
+    """
+    creator = resolve_creator_from_request(request)
+    if not creator:
+        return Response(
+            {"error": "Authentication required."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    user_doc = repo.get_user_by_uid(creator.uid)
+    plans = repo.list_plans_for_owner(creator.uid)
+    if not user_doc:
+        user_doc = {
+            "uid": creator.uid,
+            "email": creator.email or "",
+            "displayName": creator.display_name
+            or (creator.email.split("@")[0] if creator.email else "Creator"),
+            "authProvider": creator.auth_provider,
+            "photoUrl": None,
+        }
+
+    return Response(
+        {
+            "user": user_doc,
+            "cloudPlansCount": len(plans),
+        },
+        status=status.HTTP_200_OK,
     )
 
 

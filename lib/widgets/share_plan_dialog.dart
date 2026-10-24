@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/plan_models.dart';
 import '../providers/plan_studio_provider.dart';
 import '../services/maps_service.dart';
+import 'auth_modal_sheet.dart';
 
 /// Share Plan Modal — allows customizing the vanity slug (`plaans.co/<slug>`) with live
 /// availability check, setting access control (`Public`, `Unlisted`, `PIN Protected`),
@@ -216,7 +217,69 @@ class _SharePlanDialogState extends State<SharePlanDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+
+            // Creator Authentication Banner (Email & Password)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF141413), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    provider?.creatorUser != null
+                        ? Icons.verified_user_rounded
+                        : Icons.account_circle_outlined,
+                    size: 20,
+                    color: provider?.creatorUser != null
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFF1D1D28),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          provider?.creatorUser != null
+                              ? provider!.creatorUser!.displayName
+                              : 'Creator Cloud Account',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF141413),
+                          ),
+                        ),
+                        Text(
+                          provider?.creatorUser != null
+                              ? provider!.creatorUser!.email
+                              : 'Sign in with Email & Password to own this slug',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF57534E),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => AuthModalSheet.show(context),
+                    child: Text(
+                      provider?.creatorUser != null ? 'Account' : 'Sign In',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1D1D28),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Vanity Slug & Visibility Card (Phase 2 Hybrid Cloud Controls)
             Container(

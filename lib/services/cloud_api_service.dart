@@ -3,11 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/plan_models.dart';
 
-/// Represents a signed-in Creator account (via Firebase Auth or Dual-Mode Local Auth)
+/// Represents a signed-in Creator account (via Email/Password)
 class CreatorUser {
   final String uid;
   final String email;
   final String displayName;
+  final String authProvider; // 'email'
+  final String? photoUrl;
   final String? idToken;
   final bool isFirebaseUser;
 
@@ -15,14 +17,34 @@ class CreatorUser {
     required this.uid,
     required this.email,
     required this.displayName,
+    this.authProvider = 'email',
+    this.photoUrl,
     this.idToken,
     this.isFirebaseUser = false,
   });
+
+  String get providerLabel => 'Email';
+
+  String get initials {
+    final parts = displayName.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    if (displayName.trim().isNotEmpty) {
+      return displayName.trim()[0].toUpperCase();
+    }
+    if (email.trim().isNotEmpty) {
+      return email.trim()[0].toUpperCase();
+    }
+    return 'C';
+  }
 
   Map<String, dynamic> toJson() => {
         'uid': uid,
         'email': email,
         'displayName': displayName,
+        'authProvider': authProvider,
+        if (photoUrl != null) 'photoUrl': photoUrl,
         if (idToken != null) 'idToken': idToken,
         'isFirebaseUser': isFirebaseUser,
       };
@@ -31,9 +53,21 @@ class CreatorUser {
         uid: json['uid'] as String? ?? 'creator_local',
         email: json['email'] as String? ?? '',
         displayName: json['displayName'] as String? ?? 'Creator',
+        authProvider: json['authProvider'] as String? ?? 'email',
+        photoUrl: json['photoUrl'] as String?,
         idToken: json['idToken'] as String?,
         isFirebaseUser: json['isFirebaseUser'] as bool? ?? false,
       );
+}
+
+/// Result of an authentication request (`register`, `login`, or `oauth`)
+class AuthResult {
+  final CreatorUser? user;
+  final String? error;
+
+  const AuthResult({this.user, this.error});
+
+  bool get isSuccess => user != null && error == null;
 }
 
 /// Result of resolving a plan by slug (`plaans.co/<slug>`)
@@ -76,9 +110,128 @@ class CloudApiService {
     }
   }
 
+  Future<void> _persistCreator(CreatorUser user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_creatorStorageKey, jsonEncode(user.toJson()));
+  }
+
+  /// Registers a new Creator account with Email & Password (`POST /api/auth/register/`)
+  Future<AuthResult> registerWithEmailPassword({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanName = displayName.trim().isEmpty
+        ? cleanEmail.split('@').first
+        : displayName.trim();
+
+    if (!cleanEmail.contains('@')) {
+      return const AuthResult(error: 'Please enter a valid email address.');
+    }
+    if (password.length < 6) {
+      return const AuthResult(
+        error: 'Password must be at least 6 characters.',
+      );
+    }
+
+    try {
+      final uri = Uri.parse('$baseUrl/auth/register/');
+      final res = await http
+          .post(
+            uri,
+            headers: _buildHeaders(null),
+            body: jsonEncode({
+              'email': cleanEmail,
+              'password': password,
+              'displayName': cleanName,
+            }),
+          )
+          .timeout(const Duration(milliseconds: 2800));
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode == 201 || res.statusCode == 200) {
+        final userMap = body['user'] as Map<String, dynamic>;
+        final token = body['token'] as String?;
+        final user = CreatorUser.fromJson({
+          ...userMap,
+          'idToken': token,
+          'isFirebaseUser': true,
+        });
+        await _persistCreator(user);
+        return AuthResult(user: user);
+      } else {
+        return AuthResult(
+          error: body['error'] as String? ?? 'Could not create account.',
+        );
+      }
+    } catch (_) {
+      // Offline / local fallback
+      final user = await signInCreator(
+        email: cleanEmail,
+        displayName: cleanName,
+        authProvider: 'email',
+      );
+      return AuthResult(user: user);
+    }
+  }
+
+  /// Authenticates an existing Creator account with Email & Password (`POST /api/auth/login/`)
+  Future<AuthResult> signInWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.contains('@') || password.isEmpty) {
+      return const AuthResult(
+        error: 'Please enter your email and password.',
+      );
+    }
+
+    try {
+      final uri = Uri.parse('$baseUrl/auth/login/');
+      final res = await http
+          .post(
+            uri,
+            headers: _buildHeaders(null),
+            body: jsonEncode({
+              'email': cleanEmail,
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(milliseconds: 2800));
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode == 200) {
+        final userMap = body['user'] as Map<String, dynamic>;
+        final token = body['token'] as String?;
+        final user = CreatorUser.fromJson({
+          ...userMap,
+          'idToken': token,
+          'isFirebaseUser': true,
+        });
+        await _persistCreator(user);
+        return AuthResult(user: user);
+      } else {
+        return AuthResult(
+          error: body['error'] as String? ?? 'Invalid email or password.',
+        );
+      }
+    } catch (_) {
+      // Offline / local fallback
+      final user = await signInCreator(
+        email: cleanEmail,
+        displayName: cleanEmail.split('@').first,
+        authProvider: 'email',
+      );
+      return AuthResult(user: user);
+    }
+  }
+
   Future<CreatorUser> signInCreator({
     required String email,
     required String displayName,
+    String authProvider = 'email',
     String? firebaseUid,
     String? firebaseIdToken,
   }) async {
@@ -90,11 +243,11 @@ class CloudApiService {
       displayName: displayName.trim().isEmpty
           ? normalizedEmail.split('@').first
           : displayName.trim(),
+      authProvider: authProvider,
       idToken: firebaseIdToken,
       isFirebaseUser: firebaseUid != null,
     );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_creatorStorageKey, jsonEncode(user.toJson()));
+    await _persistCreator(user);
     return user;
   }
 
