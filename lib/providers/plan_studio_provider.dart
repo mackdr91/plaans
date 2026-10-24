@@ -28,6 +28,7 @@ class PlanStudioProvider extends ChangeNotifier {
   bool _isLoading = true;
   bool _isVisitorView = false;
   bool _showLandingHome = true;
+  bool _showUserItinerariesHome = false;
 
   // Phase 2 Cloud & Creator Auth State
   CreatorUser? _creatorUser;
@@ -60,6 +61,7 @@ class PlanStudioProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isVisitorView => _isVisitorView;
   bool get showLandingHome => _showLandingHome;
+  bool get showUserItinerariesHome => _showUserItinerariesHome;
   CreatorUser? get creatorUser => _creatorUser;
   bool get isBackendOnline => _isBackendOnline;
   bool get isSyncingCloud => _isSyncingCloud;
@@ -79,7 +81,51 @@ class PlanStudioProvider extends ChangeNotifier {
 
   void setShowLandingHome(bool value) {
     _showLandingHome = value;
+    if (value) {
+      _showUserItinerariesHome = false;
+      _isVisitorView = false;
+    }
     notifyListeners();
+  }
+
+  /// Routes the user to the dedicated "My Itineraries" Home Page (`UserItinerariesScreen`)
+  /// and refreshes any cloud-saved itineraries if signed in.
+  Future<void> openUserItinerariesHome() async {
+    _showUserItinerariesHome = true;
+    _showLandingHome = false;
+    _isVisitorView = false;
+    notifyListeners();
+    await syncUserCloudPlans();
+  }
+
+  /// Fetches the signed-in user's cloud itineraries (`GET /api/plans/`) and merges them with local itineraries
+  Future<void> syncUserCloudPlans() async {
+    final user = _creatorUser;
+    if (user == null) return;
+    final cloudPlans = await _cloudApi.fetchUserCloudPlans(user);
+    if (cloudPlans.isEmpty) return;
+
+    bool changed = false;
+    for (final cloudPlan in cloudPlans) {
+      final idx = _plans.indexWhere((p) => p.id == cloudPlan.id);
+      if (idx >= 0) {
+        if (cloudPlan.updatedAt.isAfter(_plans[idx].updatedAt) ||
+            !_plans[idx].isCloudSynced) {
+          _plans[idx] = cloudPlan;
+          if (_activePlan?.id == cloudPlan.id) {
+            _activePlan = cloudPlan;
+          }
+          changed = true;
+        }
+      } else {
+        _plans.insert(0, cloudPlan);
+        changed = true;
+      }
+    }
+    if (changed) {
+      notifyListeners();
+      await _repository.saveAllPlans(_plans);
+    }
   }
 
   /// Distinct categories present in the active plan's place/event blocks
@@ -224,6 +270,7 @@ class PlanStudioProvider extends ChangeNotifier {
           visitorMode && found.visibility == PlanVisibility.pinProtected;
       _pinUnlockError = null;
       _showLandingHome = false;
+      _showUserItinerariesHome = false;
       notifyListeners();
     }
   }
@@ -556,6 +603,7 @@ class PlanStudioProvider extends ChangeNotifier {
     _selectedDayFilter = null;
     _isVisitorView = false;
     _showLandingHome = false;
+    _showUserItinerariesHome = false;
     notifyListeners();
     await _repository.saveAllPlans(_plans);
     return newPlan;
@@ -572,6 +620,8 @@ class PlanStudioProvider extends ChangeNotifier {
     _plans.insert(0, cloned);
     _activePlan = cloned;
     _isVisitorView = false;
+    _showLandingHome = false;
+    _showUserItinerariesHome = false;
     notifyListeners();
     await _repository.saveAllPlans(_plans);
     return cloned;
@@ -585,6 +635,9 @@ class PlanStudioProvider extends ChangeNotifier {
     }
     notifyListeners();
     await _repository.deletePlan(planId);
+    if (_creatorUser != null) {
+      await _cloudApi.deleteCloudPlan(planId, user: _creatorUser!);
+    }
   }
 
   /// Updates top-level Plan metadata (title, subtitle, slug, cover image, dates)

@@ -11,6 +11,7 @@ import '../widgets/plan_image.dart';
 import '../widgets/plan_page_canvas.dart';
 import '../widgets/share_plan_dialog.dart';
 import 'liinks_landing_screen.dart';
+import 'user_itineraries_screen.dart';
 
 
 part 'studio/studio_navigation_bars.dart';
@@ -53,7 +54,12 @@ class _StudioScreenState extends State<StudioScreen> {
       );
     }
 
-    // 1. If on the Liinks-style Landing / Showcase Screen
+    // 1. If on the User Itineraries Home Dashboard
+    if (provider.showUserItinerariesHome && !provider.isVisitorView) {
+      return UserItinerariesScreen(provider: provider);
+    }
+
+    // 2. If on the Liinks-style Landing / Showcase Screen
     if (provider.showLandingHome && !provider.isVisitorView) {
       return LiinksLandingScreen(provider: provider);
     }

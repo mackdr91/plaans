@@ -286,6 +286,21 @@ class PlansMongoRepository:
         res = self._collection.delete_one({"id": plan_id, "ownerUid": owner_uid})
         return res.deleted_count > 0
 
+    def delete_test_plan(self, plan_id: str, slug: str) -> None:
+        normalized_slug = slug.strip().lower()
+        if self._using_memory_fallback:
+            self._memory_docs.pop(plan_id, None)
+            for k in [
+                k
+                for k, v in self._memory_docs.items()
+                if v.get("slug") == normalized_slug
+            ]:
+                self._memory_docs.pop(k, None)
+            return
+        self._collection.delete_many(
+            {"$or": [{"id": plan_id}, {"slug": normalized_slug}]}
+        )
+
     def _find_raw_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:
         if self._using_memory_fallback:
             for d in self._memory_docs.values():

@@ -174,10 +174,12 @@ void main() {
     test('Supports Email/Password authentication', () async {
       final provider = PlanStudioProvider();
       await Future<void>.delayed(const Duration(milliseconds: 50));
+      final testEmail =
+          'creator_${DateTime.now().microsecondsSinceEpoch}@plaans.co';
 
       // 1. Email/Password Registration validation (short password fails)
       final shortPass = await provider.registerWithEmail(
-        email: 'creator@plaans.co',
+        email: testEmail,
         password: '123',
         displayName: 'Alex Rivera',
       );
@@ -186,17 +188,35 @@ void main() {
 
       // 2. Valid Email/Password Registration
       final emailOk = await provider.registerWithEmail(
-        email: 'creator@plaans.co',
+        email: testEmail,
         password: 'password123',
         displayName: 'Alex Rivera',
       );
       expect(emailOk, isTrue);
-      expect(provider.creatorUser?.email, equals('creator@plaans.co'));
+      expect(provider.creatorUser?.email, equals(testEmail));
       expect(provider.creatorUser?.providerLabel, equals('Email'));
 
       // 3. Sign Out
       await provider.signOutCreator();
       expect(provider.creatorUser, isNull);
+    });
+
+    test('Home button routes to User Itineraries page and back to Studio',
+        () async {
+      final provider = PlanStudioProvider();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // Clicking Home opens the User Itineraries Dashboard
+      await provider.openUserItinerariesHome();
+      expect(provider.showUserItinerariesHome, isTrue);
+      expect(provider.showLandingHome, isFalse);
+      expect(provider.isVisitorView, isFalse);
+
+      // Selecting an itinerary transitions into the Studio Editor
+      final firstPlanId = provider.plans.first.id;
+      provider.selectPlan(firstPlanId);
+      expect(provider.showUserItinerariesHome, isFalse);
+      expect(provider.activePlan?.id, equals(firstPlanId));
     });
   });
 }

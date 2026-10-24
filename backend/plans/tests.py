@@ -8,6 +8,8 @@ class PlansApiTests(TestCase):
         self.client = APIClient()
         self.headers = {"HTTP_X_PLAANS_UID": "creator_test_1"}
         repo.delete_user_by_email("alex@plaans.app")
+        repo.delete_test_plan("plan_test_tokyo", "tokyo-secret-weekend")
+        repo.delete_test_plan("plan_email_auth", "alex-kyoto-guide")
 
     def test_health_and_plan_lifecycle_with_pin_protection(self):
         # 1. Health check

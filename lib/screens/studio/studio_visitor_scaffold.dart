@@ -42,6 +42,22 @@ class _PublicVisitorPreviewScaffold extends StatelessWidget {
                         borderRadius: BorderRadius.circular(100),
                       ),
                     ),
+                    onPressed: () => provider.openUserItinerariesHome(),
+                    icon: const Icon(Icons.home_outlined, size: 17),
+                    label: const Text(
+                      'Home',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.92),
+                      foregroundColor: const Color(0xFF1D1D28),
+                      elevation: 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                    ),
                     onPressed: () => provider.setVisitorView(false),
                     icon: const Icon(Icons.edit_note_rounded, size: 18),
                     label: const Text(

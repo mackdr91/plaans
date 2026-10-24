@@ -251,9 +251,10 @@ class _LiinksLandingScreenState extends State<LiinksLandingScreen> {
                     ),
                     child: Row(
                       children: [
-                        // `@plaans` Logo (matching `@liinks`)
+                        // `@plaans` Logo (routes to User Itineraries Home)
                         InkWell(
-                          onTap: () {},
+                          onTap: () =>
+                              widget.provider.openUserItinerariesHome(),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -290,10 +291,10 @@ class _LiinksLandingScreenState extends State<LiinksLandingScreen> {
                         if (isDesktop) ...[
                           const SizedBox(width: 36),
                           _NavHeaderLink(
-                            label: 'Itineraries',
-                            hasDropdown: true,
+                            label: 'My Itineraries',
+                            hasDropdown: false,
                             onTap: () =>
-                                widget.provider.setShowLandingHome(false),
+                                widget.provider.openUserItinerariesHome(),
                           ),
                           const SizedBox(width: 24),
                           _NavHeaderLink(

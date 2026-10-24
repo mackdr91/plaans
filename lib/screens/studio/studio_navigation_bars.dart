@@ -23,9 +23,9 @@ class _MobileStudioTopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Home `@plaans` button
+          // Home `@plaans` button -> routes to User Itineraries Home Page
           InkWell(
-            onTap: () => provider.setShowLandingHome(true),
+            onTap: () => provider.openUserItinerariesHome(),
             borderRadius: BorderRadius.circular(999),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -33,15 +33,15 @@ class _MobileStudioTopBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    size: 13,
+                    Icons.home_outlined,
+                    size: 15,
                     color: Colors.white70,
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '@plaans',
+                    'Home',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
                     ),
@@ -252,9 +252,9 @@ class _LiinksWindowTopBar extends StatelessWidget {
                 onPressed: () => Scaffold.of(ctx).openDrawer(),
               ),
             ),
-          // Traffic light dots + `@plaans` home button
+          // Traffic light dots + `@plaans` home button -> routes to User Itineraries Home Page
           InkWell(
-            onTap: () => provider.setShowLandingHome(true),
+            onTap: () => provider.openUserItinerariesHome(),
             borderRadius: BorderRadius.circular(999),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -286,10 +286,16 @@ class _LiinksWindowTopBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 14),
+                const Icon(
+                  Icons.home_outlined,
+                  size: 16,
+                  color: Color(0xFF1D1D28),
+                ),
+                const SizedBox(width: 5),
                 Text(
-                  '@plaans',
+                  'My Itineraries',
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 15,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                     color: const Color(0xFF1D1D28),
                   ),
@@ -441,9 +447,9 @@ class _LiinksDarkIconRail extends StatelessWidget {
           const SizedBox(height: 6),
           _RailIconButton(
             icon: Icons.home_outlined,
-            tooltip: 'Landing Showcase Home',
+            tooltip: 'My Itineraries Home',
             isSelected: false,
-            onTap: () => provider.setShowLandingHome(true),
+            onTap: () => provider.openUserItinerariesHome(),
           ),
           const SizedBox(height: 6),
           _RailIconButton(

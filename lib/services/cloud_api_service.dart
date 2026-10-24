@@ -314,6 +314,43 @@ class CloudApiService {
     );
   }
 
+  /// Fetches all cloud-synced plans belonging to the authenticated creator (`GET /api/plans/`)
+  Future<List<PlanModel>> fetchUserCloudPlans(CreatorUser user) async {
+    try {
+      final uri = Uri.parse('$baseUrl/plans/');
+      final res = await http
+          .get(uri, headers: _buildHeaders(user))
+          .timeout(const Duration(milliseconds: 2200));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final rawList = body['plans'] as List<dynamic>? ?? const [];
+        return rawList
+            .whereType<Map<String, dynamic>>()
+            .map((m) => PlanModel.fromJson(m).copyWith(isCloudSynced: true))
+            .toList();
+      }
+    } catch (_) {
+      // Offline / local fallback
+    }
+    return const [];
+  }
+
+  /// Deletes a cloud-synced plan owned by the authenticated creator (`DELETE /api/plans/<id>/`)
+  Future<bool> deleteCloudPlan(
+    String planId, {
+    required CreatorUser user,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/plans/${planId.trim()}/');
+      final res = await http
+          .delete(uri, headers: _buildHeaders(user))
+          .timeout(const Duration(milliseconds: 2000));
+      return res.statusCode == 200 || res.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Syncs/publishes a `PlanModel` to the Django + MongoDB API.
   /// Gracefully returns a locally-marked synced plan if the local backend server is not running.
   Future<PlanModel> syncPlanToCloud(
